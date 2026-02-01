@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Loading...</title>
+    <style>
+        body {
+            background: #0f172a;
+            color: white;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial;
+            overflow: hidden;
+        }
+
+        .loader {
+            text-align: center;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid #334155;
+            border-top: 6px solid #38bdf8;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0); }
+            100% { transform: rotate(360deg); }
+        }
+
+        p {
+            margin-top: 15px;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+    </style>
+
+    <script>
+        setTimeout(() => {
+            window.location.href = "/dashboard";
+        }, 2000);
+    </script>
+</head>
+
+<body>
+    <div class="loader">
+        <div class="spinner"></div>
+        <p>Verifying credentials…</p>
+    </div>
+</body>
+</html>

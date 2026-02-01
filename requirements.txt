@@ -1,0 +1,6 @@
+flask
+bcrypt
+requests
+python-dotenv
+PyJWT
+flask-jwt-extended
