@@ -1,14 +1,17 @@
 from flask import Flask, jsonify, render_template, request, redirect, make_response
-import bcrypt, re, hashlib, requests, secrets, string, datetime, jwt
+import bcrypt, re, hashlib, requests, secrets, string, datetime, jwt, os
 from database import get_db, create_table
 from functools import wraps
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "super_secret_key_123"
 
+# ================== CONFIG ==================
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "fallback_secret_key")
+
+# Create DB table at startup
 create_table()
 
-# ---------- PASSWORD STRENGTH ----------
+# ================== PASSWORD STRENGTH ==================
 def check_strength(password):
     score = 0
     if len(password) >= 8: score += 1
@@ -18,16 +21,16 @@ def check_strength(password):
     if re.search(r"[!@#$%^&*()]", password): score += 1
 
     levels = ["Very Weak", "Weak", "Medium", "Strong", "Very Strong"]
-    return levels[score-1] if score else "Very Weak"
+    return levels[score - 1] if score else "Very Weak"
 
-# ---------- BREACH CHECK ----------
+# ================== BREACH CHECK ==================
 def is_breached(password):
     sha1 = hashlib.sha1(password.encode()).hexdigest().upper()
     prefix, suffix = sha1[:5], sha1[5:]
     res = requests.get(f"https://api.pwnedpasswords.com/range/{prefix}")
     return suffix in res.text
 
-# ---------- PASSWORD GENERATOR ----------
+# ================== PASSWORD GENERATOR ==================
 def generate_password():
     chars = string.ascii_letters + string.digits + "!@#$%^&*()"
     while True:
@@ -35,7 +38,7 @@ def generate_password():
         if check_strength(pwd) in ["Strong", "Very Strong"] and not is_breached(pwd):
             return pwd
 
-# ---------- JWT DECORATOR ----------
+# ================== JWT DECORATOR ==================
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -51,7 +54,7 @@ def token_required(f):
         return f(data["user"])
     return decorated
 
-# ---------- ROUTES ----------
+# ================== ROUTES ==================
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -60,12 +63,15 @@ def home():
 def generate_password_api():
     return jsonify({"password": generate_password()})
 
-# ---------- REGISTER ----------
+# ================== REGISTER ==================
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
     username = data.get("username")
     password = data.get("password")
+
+    if not username or not password:
+        return jsonify({"error": "Missing fields"}), 400
 
     if is_breached(password):
         return jsonify({"error": "Password found in breach"}), 400
@@ -75,7 +81,7 @@ def register():
 
     try:
         db.execute(
-            "INSERT INTO users (username, password_hash) VALUES (?,?)",
+            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
             (username, hashed)
         )
         db.commit()
@@ -84,7 +90,7 @@ def register():
 
     return jsonify({"message": "Registered successfully"})
 
-# ---------- LOGIN (UPDATED) ----------
+# ================== LOGIN ==================
 @app.route("/login", methods=["POST"])
 def login():
     data = request.json
@@ -100,40 +106,36 @@ def login():
     if not user:
         return jsonify({"error": "User not found"}), 401
 
-    if bcrypt.checkpw(password.encode(), user["password_hash"].encode()):
-        token = jwt.encode(
-            {
-                "user": username,
-                "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
-            },
-            app.config["SECRET_KEY"],
-            algorithm="HS256"
-        )
+    if not bcrypt.checkpw(password.encode(), user["password_hash"].encode()):
+        return jsonify({"error": "Invalid credentials"}), 401
 
-        response = make_response(jsonify({"redirect": "/loading"}))
-        response.set_cookie("token", token, httponly=True)
-        return response
+    token = jwt.encode(
+        {
+            "user": username,
+            "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=30)
+        },
+        app.config["SECRET_KEY"],
+        algorithm="HS256"
+    )
 
-    return jsonify({"error": "Invalid credentials"}), 401
+    response = make_response(jsonify({"success": True}))
+    response.set_cookie("token", token, httponly=True, samesite="Lax")
+    return response
 
-# ---------- LOADING PAGE ----------
+# ================== LOADING ==================
 @app.route("/loading")
 def loading():
     return render_template("loading.html")
 
-# ---------- DASHBOARD ----------
+# ================== DASHBOARD ==================
 @app.route("/dashboard")
 @token_required
 def dashboard(username):
     return render_template("dashboard.html", user=username)
 
-# ---------- LOGOUT ----------
+# ================== LOGOUT ==================
 @app.route("/logout")
 def logout():
     response = redirect("/")
     response.set_cookie("token", "", expires=0)
     return response
-
-# ---------- RUN ----------
-if __name__ == "__main__":
-    app.run(host="0.0.0.0",port=10000)
