@@ -4,3 +4,5 @@ requests
 python-dotenv
 PyJWT
 flask-jwt-extended
+gunicorn
+
